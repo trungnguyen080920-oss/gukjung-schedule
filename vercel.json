@@ -25,13 +25,5 @@
   ],
   "rewrites": [
     { "source": "/share/:token", "destination": "/share/:token" }
-  ],
-  "env": {
-    "DATABASE_URL":    { "type": "secret", "name": "DATABASE_URL" },
-    "JWT_SECRET":      { "type": "secret", "name": "JWT_SECRET" },
-    "AI_API_KEY":      { "type": "secret", "name": "AI_API_KEY" },
-    "AI_API_BASE":     { "type": "plain",  "value": "https://ark.volcengine.com/api/v3" },
-    "AI_MODEL":        { "type": "plain",  "value": "doubao-pro-32k-241215" },
-    "NEXT_PUBLIC_APP_URL": { "type": "plain", "value": "https://gukjung.vercel.app" }
-  }
+  ]
 }

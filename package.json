@@ -14,8 +14,8 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "electron:dev": "concurrently --kill-others-on-fail --names \"next,electron\" --prefix-colors \"cyan,magenta\" \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "cross-env ELECTRON_BUILD=1 next build && electron-builder --win --x64",
-    "electron:pack": "cross-env ELECTRON_BUILD=1 next build && electron-builder --win --x64 --dir"
+    "electron:build": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64",
+    "electron:pack": "cross-env ELECTRON_BUILD=1 next build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64 --dir"
   },
   "build": {
     "appId": "com.gukjung.schedule",
@@ -31,27 +31,6 @@
       "!node_modules/**"
     ],
     "extraResources": [
-      {
-        "from": ".next/standalone",
-        "to": "server",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": ".next/static",
-        "to": "server/.next/static",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "public",
-        "to": "server/public",
-        "filter": [
-          "**/*"
-        ]
-      },
       {
         "from": "assets/icon.png",
         "to": "icon.png"

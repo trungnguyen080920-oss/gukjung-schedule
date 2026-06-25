@@ -4,68 +4,17 @@
 
 const { app, BrowserWindow, Tray, Menu, globalShortcut, nativeImage, shell, dialog } = require("electron");
 const path = require("path");
-const { spawn, execSync } = require("child_process");
 
 // ── Config ──────────────────────────────────────────────────────────────────
-const PORT = 3000;
-const DEV_URL = `http://localhost:${PORT}`;
+const PROD_URL = "https://gukjung.vercel.app";
+const DEV_URL = "http://localhost:3000";
 const isDev = !app.isPackaged;
+const APP_URL = isDev ? DEV_URL : PROD_URL;
 
 let mainWindow = null;
 let pomodoroWindow = null;
 let tray = null;
-let nextProcess = null;
 let isQuitting = false;
-
-// ── Khởi động Next.js server (chỉ trong production) ─────────────────────────
-function startNextServer() {
-  if (isDev) return Promise.resolve(); // dev: Next.js chạy riêng qua `npm run dev`
-
-  return new Promise((resolve, reject) => {
-    const serverDir = path.join(process.resourcesPath, "server");
-    const serverScript = path.join(serverDir, "server.js");
-
-    nextProcess = spawn(process.execPath, [serverScript], {
-      cwd: serverDir,
-      env: {
-        ...process.env,
-        PORT: String(PORT),
-        NODE_ENV: "production",
-        // Prisma database ở resources
-        DATABASE_URL: `file:${path.join(app.getPath("userData"), "polyglot.db")}`,
-      },
-    });
-
-    nextProcess.stdout.on("data", (d) => {
-      const msg = d.toString();
-      if (msg.includes("Ready") || msg.includes("ready")) resolve();
-    });
-    nextProcess.stderr.on("data", (d) => console.error("[Next]", d.toString()));
-    nextProcess.on("error", reject);
-
-    // Timeout fallback: đợi 15s rồi thử load dù Next.js chưa log Ready
-    setTimeout(resolve, 15000);
-  });
-}
-
-// ── Chờ Next.js sẵn sàng (polling) ─────────────────────────────────────────
-async function waitForNext(maxMs = 30000) {
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    try {
-      const http = require("http");
-      await new Promise((res, rej) => {
-        const req = http.get(`http://localhost:${PORT}`, (r) => { r.resume(); res(); });
-        req.on("error", rej);
-        req.setTimeout(1000, () => { req.destroy(); rej(new Error("timeout")); });
-      });
-      return true;
-    } catch {
-      await new Promise((r) => setTimeout(r, 500));
-    }
-  }
-  return false;
-}
 
 // ── Tạo cửa sổ chính ─────────────────────────────────────────────────────────
 async function createMainWindow() {
@@ -95,14 +44,7 @@ async function createMainWindow() {
   // Ẩn menu bar mặc định của Electron
   mainWindow.setMenuBarVisibility(false);
 
-  const ready = await waitForNext(30000);
-  if (!ready) {
-    dialog.showErrorBox("PolyGlot Hub", "Không thể kết nối server. Hãy đảm bảo `npm run dev` đang chạy.");
-    app.quit();
-    return;
-  }
-
-  mainWindow.loadURL(DEV_URL);
+  mainWindow.loadURL(APP_URL);
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 
   // Ctrl+R reload (dev only)
@@ -151,7 +93,7 @@ function createOrTogglePomodoroWindow() {
     show: false,
   });
 
-  pomodoroWindow.loadURL(`${DEV_URL}/pomodoro`);
+  pomodoroWindow.loadURL(`${APP_URL}/pomodoro`);
   pomodoroWindow.once("ready-to-show", () => pomodoroWindow?.show());
   pomodoroWindow.on("closed", () => { pomodoroWindow = null; });
 }
@@ -170,7 +112,7 @@ function createTray() {
     Menu.buildFromTemplate([
       {
         label: "📊 Mở Dashboard",
-        click() { mainWindow?.show(); mainWindow?.focus(); mainWindow?.loadURL(DEV_URL + "/dashboard"); },
+        click() { mainWindow?.show(); mainWindow?.focus(); mainWindow?.loadURL(APP_URL + "/dashboard"); },
       },
       {
         label: "🍅 Pomodoro Timer (Ctrl+Shift+P)",
@@ -242,7 +184,6 @@ app.whenReady().then(async () => {
     mainWindow?.focus();
   });
 
-  await startNextServer();
   createTray();
   await createMainWindow();
   registerShortcuts();
@@ -262,13 +203,12 @@ app.on("activate", () => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
-  if (nextProcess) { nextProcess.kill(); nextProcess = null; }
 });
 
 // Mở link ngoài trình duyệt mặc định thay vì Electron window mới
 app.on("web-contents-created", (_, contents) => {
   contents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http://localhost")) return { action: "allow" };
+    if (url.startsWith("http://localhost") || url.startsWith("https://gukjung.vercel.app")) return { action: "allow" };
     shell.openExternal(url);
     return { action: "deny" };
   });

@@ -1,0 +1,220 @@
+// GUKJUNG Schedule — Prisma Schema (v3.0)
+// Mô hình thực thể động: thêm môn học mới = thêm bản ghi Subject/SubjectCategory,
+// KHÔNG cần sửa code. Đa người dùng (multi-tenant) + đa môn học (multi-subject).
+//
+// DB dev local: SQLite. Khi deploy đổi provider -> "postgresql" và đổi
+// DATABASE_URL trong .env. Lưu ý: SQLite không hỗ trợ enum nên `User.role`
+// dùng String (xem comment); chuyển Postgres sẽ nâng thành enum thật.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// 1. NGƯỜI DÙNG & PHÂN QUYỀN
+// ---------------------------------------------------------------------------
+
+/// Vai trò hợp lệ cho User.role (SQLite không có enum): "ADMIN" | "USER"
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String // hash thật xử lý ở Prompt 2 (bcrypt/argon2)
+  role         String   @default("USER") // ADMIN | USER
+  apiToken     String?  @unique // token riêng cho script tự động (Watcher) — Prompt 2
+  createdAt    DateTime @default(now()) // ngày tham gia
+  updatedAt    DateTime @updatedAt
+
+  sessions     StudySession[]
+  progresses   Progress[]
+  sharedLinks  SharedLink[]
+  healthLogs   HealthLog[]
+  plannerTasks PlannerTask[]
+
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------------
+// 2. DANH MỤC & MÔN HỌC (thực thể động)
+// ---------------------------------------------------------------------------
+
+/// Danh mục gốc: "Ngôn ngữ", "Công nghệ", "Khoa học tự nhiên"...
+model SubjectCategory {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique // LANG, TECH, SCI...
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subjects Subject[]
+}
+
+/// Môn cụ thể: TOEIC, BCT, HSK, Tiếng Nhật N3, Tiếng Pháp DELF, Lập trình React...
+model Subject {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique // TOEIC, BCT, HSK, JP_N3, FR_DELF, REACT...
+  description String?
+  colorHex    String? // màu chủ đề cho Heatmap/UI (Prompt 3): Trung=hồng/tím, Anh=xanh, Nhật=đỏ
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  categoryId String
+  category   SubjectCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  sessions   StudySession[]
+  progresses Progress[]
+
+  @@index([categoryId])
+}
+
+// ---------------------------------------------------------------------------
+// 3. PHIÊN HỌC (log thô) & TIẾN ĐỘ (gộp)
+// ---------------------------------------------------------------------------
+
+/// Log thô mỗi lần đồng bộ từ Watcher/Anki. API POST /api/sync/anki-log (Prompt 2)
+/// sẽ ghi 1 bản ghi ở đây rồi cộng dồn vào Progress.
+model StudySession {
+  id          String   @id @default(cuid())
+  noteCount   Int      @default(0) // số note đẩy lên trong phiên
+  cardCount   Int      @default(0) // số thẻ đẩy lên trong phiên
+  layer       String? // tầng dữ liệu (Vocab, Cloze, Blurting, Grammar...)
+  durationSec Int      @default(0) // thời gian học (giây)
+  studiedAt   DateTime @default(now())
+
+  // batchId do Watcher Python tạo ra (ví dụ: "bct3_bai3_vocab" hoặc UUID).
+  // Optional để tương thích ngược; khi có → DB unique constraint chống trùng lặp.
+  batchId String? @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, subjectId])
+  @@index([studiedAt])
+}
+
+/// Tiến độ gộp theo (User x Subject): tổng thẻ, thẻ đã thuộc, thời gian, streak.
+model Progress {
+  id            String    @id @default(cuid())
+  totalNotes    Int       @default(0)
+  totalCards    Int       @default(0)
+  masteredCards Int       @default(0) // số thẻ đã thuộc
+  totalStudySec Int       @default(0) // tổng thời gian học (giây)
+  currentStreak Int       @default(0) // streak ngày hiện tại
+  longestStreak Int       @default(0)
+  lastStudiedAt DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectId]) // mỗi user chỉ có 1 bản tiến độ / môn
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// 4. CHIA SẺ TIẾN ĐỘ (public link) — phục vụ Prompt 4
+// ---------------------------------------------------------------------------
+
+/// Token public cho phép xem Dashboard tiến độ của user mà không cần đăng nhập.
+model SharedLink {
+  id         String    @id @default(cuid())
+  shareToken String    @unique // hash duy nhất dùng cho route /share/[shareToken]
+  isActive   Boolean   @default(true)
+  viewCount  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime? // null = không hết hạn
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// 5. SỨC KHỎE — Health Log + WorkoutEntry + MealEntry (tách bảng riêng)
+// ---------------------------------------------------------------------------
+
+model HealthLog {
+  id        String   @id @default(cuid())
+  date      String   // YYYY-MM-DD
+  waterMl   Int      @default(0)
+  weightKg  Float?
+  notes     String?
+  // Denormalized totals — tự động recompute khi thêm/xoá WorkoutEntry/MealEntry
+  calIn     Int      @default(0)   // = SUM(meals.calories)
+  calBurned Int      @default(0)   // = SUM(workouts.calBurned)
+  proteinG  Int      @default(0)   // = SUM(meals.proteinG)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workouts  WorkoutEntry[]
+  meals     MealEntry[]
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+/// Mỗi buổi tập = 1 bản ghi (thay vì JSON string trước đây)
+model WorkoutEntry {
+  id           String    @id @default(cuid())
+  name         String    // "Leg Day", "Push Day", "Cardio"
+  durationMin  Int       @default(0)
+  calBurned    Int       @default(0)
+  muscleGroups String    @default("[]") // JSON ["Đùi trước","Đùi sau","Mông"]
+  notes        String?
+  createdAt    DateTime  @default(now())
+  healthLogId  String
+  healthLog    HealthLog @relation(fields: [healthLogId], references: [id], onDelete: Cascade)
+  @@index([healthLogId])
+}
+
+/// Mỗi bữa ăn = 1 bản ghi (thay vì JSON string trước đây)
+model MealEntry {
+  id          String    @id @default(cuid())
+  name        String    // "Ức gà 150g", "Cơm trắng 200g"
+  calories    Int       @default(0)
+  proteinG    Int       @default(0)
+  carbsG      Int       @default(0)
+  fatG        Int       @default(0)
+  timeEaten   String?   // "08:30" — giờ ăn (optional)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  healthLogId String
+  healthLog   HealthLog @relation(fields: [healthLogId], references: [id], onDelete: Cascade)
+  @@index([healthLogId])
+}
+
+// ---------------------------------------------------------------------------
+// 6. KẾ HOẠCH NGÀY (Daily Planner + Checklist)
+// ---------------------------------------------------------------------------
+
+model PlannerTask {
+  id           String   @id @default(cuid())
+  date         String   // YYYY-MM-DD
+  title        String
+  category     String   @default("study") // study | health | work | personal
+  subjectCode  String?
+  isCompleted  Boolean  @default(false)
+  priority     Int      @default(1)       // 1=normal 2=high 3=urgent
+  estimatedMin Int?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, date])
+}

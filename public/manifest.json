@@ -1,0 +1,22 @@
+{
+  "name": "GUKJUNG Schedule",
+  "short_name": "GUKJUNG",
+  "description": "Mission Control — học ngôn ngữ, theo dõi sức khoẻ, lập kế hoạch ngày",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Dashboard",     "url": "/dashboard", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Daily Planner", "url": "/planner",   "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Sức Khoẻ",     "url": "/health",    "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Pomodoro",      "url": "/pomodoro",  "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "categories": ["education", "productivity", "health-fitness"],
+  "lang": "vi"
+}

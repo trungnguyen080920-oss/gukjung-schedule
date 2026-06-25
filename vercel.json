@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "name": "gukjung-schedule",
+  "framework": "nextjs",
+  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
+  "regions": ["sin1"],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/share/:token", "destination": "/share/:token" }
+  ],
+  "env": {
+    "DATABASE_URL":    { "type": "secret", "name": "DATABASE_URL" },
+    "JWT_SECRET":      { "type": "secret", "name": "JWT_SECRET" },
+    "AI_API_KEY":      { "type": "secret", "name": "AI_API_KEY" },
+    "AI_API_BASE":     { "type": "plain",  "value": "https://ark.volcengine.com/api/v3" },
+    "AI_MODEL":        { "type": "plain",  "value": "doubao-pro-32k-241215" },
+    "NEXT_PUBLIC_APP_URL": { "type": "plain", "value": "https://gukjung.vercel.app" }
+  }
+}
